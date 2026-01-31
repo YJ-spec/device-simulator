@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>設備模擬器管理介面</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+        
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        header h1 {
+            font-size: 2em;
+            margin-bottom: 10px;
+        }
+        
+        header p {
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 30px;
+        }
+        
+        .control-panel {
+            background: #f8f9fa;
+            border-radius: 8px;
+            padding: 25px;
+            margin-bottom: 30px;
+        }
+        
+        .control-panel h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 15px;
+            margin-bottom: 15px;
+        }
+        
+        .form-group {
+            display: flex;
+            flex-direction: column;
+        }
+        
+        label {
+            font-weight: 600;
+            margin-bottom: 5px;
+            color: #555;
+            font-size: 0.9em;
+        }
+        
+        input, select {
+            padding: 10px;
+            border: 2px solid #ddd;
+            border-radius: 6px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+        
+        input:focus, select:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+        
+        .checkbox-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .checkbox-group input[type="checkbox"] {
+            width: auto;
+            margin: 0;
+        }
+        
+        .btn-group {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 12px 24px;
+            border: none;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+        
+        .btn-success {
+            background: #28a745;
+            color: white;
+        }
+        
+        .btn-success:hover {
+            background: #218838;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(40, 167, 69, 0.4);
+        }
+        
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+        
+        .btn-danger:hover {
+            background: #c82333;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(220, 53, 69, 0.4);
+        }
+        
+        .btn-warning {
+            background: #ffc107;
+            color: #333;
+        }
+        
+        .btn-warning:hover {
+            background: #e0a800;
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(255, 193, 7, 0.4);
+        }
+        
+        .btn-sm {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+        
+        .devices-section h2 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 1.5em;
+        }
+        
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 8px;
+            text-align: center;
+        }
+        
+        .stat-card .number {
+            font-size: 2em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+        
+        .stat-card .label {
+            opacity: 0.9;
+            font-size: 0.9em;
+        }
+        
+        .devices-table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+        }
+        
+        .devices-table thead {
+            background: #f8f9fa;
+        }
+        
+        .devices-table th {
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+            color: #555;
+            text-transform: uppercase;
+            font-size: 0.85em;
+            letter-spacing: 0.5px;
+        }
+        
+        .devices-table td {
+            padding: 15px;
+            border-top: 1px solid #eee;
+        }
+        
+        .devices-table tbody tr:hover {
+            background: #f8f9fa;
+        }
+        
+        .status-badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+        
+        .status-running {
+            background: #d4edda;
+            color: #155724;
+        }
+        
+        .status-stopped {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        
+        .status-connected {
+            background: #d1ecf1;
+            color: #0c5460;
+        }
+        
+        .status-disconnected {
+            background: #fff3cd;
+            color: #856404;
+        }
+        
+        .code {
+            font-family: 'Courier New', monospace;
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-size: 0.9em;
+        }
+        
+        .empty-state {
+            text-align: center;
+            padding: 60px 20px;
+            color: #999;
+        }
+        
+        .empty-state svg {
+            width: 100px;
+            height: 100px;
+            margin-bottom: 20px;
+            opacity: 0.3;
+        }
+        
+        @media (max-width: 768px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+            
+            .devices-table {
+                font-size: 0.85em;
+            }
+            
+            .devices-table th,
+            .devices-table td {
+                padding: 10px;
+            }
+        }
+        
+        .loading {
+            display: none;
+            text-align: center;
+            padding: 20px;
+            color: #667eea;
+        }
+        
+        .loading.active {
+            display: block;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🔧 ZP2/ZF1 設備模擬器</h1>
+            <p>動態管理多個 MQTT 設備模擬器</p>
+        </header>
+        
+        <div class="content">
+            <!-- 新增設備控制面板 -->
+            <div class="control-panel">
+                <h2>新增設備</h2>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="deviceModel">設備型號</label>
+                        <select id="deviceModel">
+                            <option value="">載入中...</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="fwVersion">韌體版本 (選填)</label>
+                        <input type="text" id="fwVersion" placeholder="留空使用預設版本">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="deviceMac">MAC 地址 (選填)</label>
+                        <input type="text" id="deviceMac" placeholder="留空自動生成">
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="deviceCount">批次數量</label>
+                        <input type="number" id="deviceCount" value="1" min="1" max="100">
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <div class="checkbox-group">
+                            <input type="checkbox" id="useSequential" checked>
+                            <label for="useSequential" style="margin: 0;">使用序列 MAC (4802afXXXXXX)</label>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="addDevice()">➕ 新增設備</button>
+                    <button class="btn-primary" onclick="addDevicesBatch()">➕ 批次新增</button>
+                    <button class="btn-success" onclick="startAll()">▶️ 啟動全部</button>
+                    <button class="btn-warning" onclick="stopAll()">⏸️ 停止全部</button>
+                    <button class="btn-danger" onclick="refreshDevices()">🔄 重新整理</button>
+                </div>
+            </div>
+            
+            <!-- 統計資訊 -->
+            <div class="stats">
+                <div class="stat-card">
+                    <div class="number" id="totalDevices">0</div>
+                    <div class="label">總設備數</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="runningDevices">0</div>
+                    <div class="label">運行中</div>
+                </div>
+                <div class="stat-card">
+                    <div class="number" id="connectedDevices">0</div>
+                    <div class="label">已連線</div>
+                </div>
+            </div>
+
+            <!-- 偵錯資訊 -->
+            <div class="control-panel">
+                <h2>偵錯資訊</h2>
+                <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                    API Base: <span class="code" id="apiBase">(尚未初始化)</span>
+                </div>
+                <pre id="debugLog" style="background:#111; color:#0f0; padding:12px; border-radius:6px; height:160px; overflow:auto; font-size:12px;"></pre>
+            </div>
+            
+            <!-- 設備列表 -->
+            <div class="devices-section">
+                <h2>設備列表</h2>
+                
+                <div class="loading" id="loading">載入中...</div>
+                
+                <div id="devicesContainer">
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                        </svg>
+                        <h3>尚無設備</h3>
+                        <p>點擊上方「新增設備」開始建立模擬器</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const API_BASE = location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
+        const api = (path) => `${API_BASE}${path}`;
+        const debugLogEl = document.getElementById('debugLog');
+        const apiBaseEl = document.getElementById('apiBase');
+        const logMessage = (message) => {
+            const time = new Date().toLocaleTimeString();
+            debugLogEl.textContent += `[${time}] ${message}\n`;
+            debugLogEl.scrollTop = debugLogEl.scrollHeight;
+        };
+
+        const apiFetch = async (path, options = {}) => {
+            const url = api(path);
+            const method = options.method || 'GET';
+            logMessage(`→ ${method} ${url}`);
+            const response = await fetch(url, options);
+            logMessage(`← ${response.status} ${method} ${url}`);
+            return response;
+        };
+        let devices = [];
+        let models = {};
+        
+        // 初始化
+        async function init() {
+            apiBaseEl.textContent = API_BASE || '(same-origin)';
+            logMessage('初始化完成');
+            await loadModels();
+            await refreshDevices();
+            setInterval(refreshDevices, 3000); // 每3秒更新一次狀態
+        }
+        
+        // 載入支援的型號
+        async function loadModels() {
+            try {
+                const response = await apiFetch('/api/models');
+                const data = await response.json();
+                
+                if (data.success) {
+                    models = data.models;
+                    const select = document.getElementById('deviceModel');
+                    select.innerHTML = Object.keys(models).map(model => 
+                        `<option value="${model}">${model} (${models[model]})</option>`
+                    ).join('');
+                }
+            } catch (error) {
+                logMessage(`載入型號失敗: ${error.message}`);
+                console.error('載入型號失敗:', error);
+            }
+        }
+        
+        // 重新整理設備列表
+        async function refreshDevices() {
+            const loading = document.getElementById('loading');
+            const container = document.getElementById('devicesContainer');
+            
+            try {
+                const response = await apiFetch('/api/devices');
+                const data = await response.json();
+                
+                if (data.success) {
+                    devices = data.devices;
+                    updateStats();
+                    renderDevices();
+                }
+            } catch (error) {
+                logMessage(`載入設備失敗: ${error.message}`);
+                console.error('載入設備失敗:', error);
+            }
+        }
+        
+        // 更新統計資訊
+        function updateStats() {
+            document.getElementById('totalDevices').textContent = devices.length;
+            document.getElementById('runningDevices').textContent = 
+                devices.filter(d => d.running).length;
+            document.getElementById('connectedDevices').textContent = 
+                devices.filter(d => d.connected).length;
+        }
+        
+        // 渲染設備列表
+        function renderDevices() {
+            const container = document.getElementById('devicesContainer');
+            
+            if (devices.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 3v2m6-2v2M9 19v2m6-2v2M5 9H3m2 6H3m18-6h-2m2 6h-2M7 19h10a2 2 0 002-2V7a2 2 0 00-2-2H7a2 2 0 00-2 2v10a2 2 0 002 2zM9 9h6v6H9V9z"></path>
+                        </svg>
+                        <h3>尚無設備</h3>
+                        <p>點擊上方「新增設備」開始建立模擬器</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            container.innerHTML = `
+                <table class="devices-table">
+                    <thead>
+                        <tr>
+                            <th>MAC 地址</th>
+                            <th>型號</th>
+                            <th>韌體版本</th>
+                            <th>Topic</th>
+                            <th>運行狀態</th>
+                            <th>連線狀態</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${devices.map(device => `
+                            <tr>
+                                <td><span class="code">${device.mac}</span></td>
+                                <td><strong>${device.model}</strong></td>
+                                <td>${device.fw_version}</td>
+                                <td><span class="code">${device.topic}</span></td>
+                                <td>
+                                    <span class="status-badge ${device.running ? 'status-running' : 'status-stopped'}">
+                                        ${device.running ? '🟢 運行中' : '🔴 已停止'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <span class="status-badge ${device.connected ? 'status-connected' : 'status-disconnected'}">
+                                        ${device.connected ? '✓ 已連線' : '✗ 未連線'}
+                                    </span>
+                                </td>
+                                <td>
+                                    <div class="btn-group">
+                                        ${!device.running ? 
+                                            `<button class="btn-success btn-sm" onclick="startDevice('${device.device_id}')">▶️ 啟動</button>` :
+                                            `<button class="btn-warning btn-sm" onclick="stopDevice('${device.device_id}')">⏸️ 停止</button>`
+                                        }
+                                        <button class="btn-danger btn-sm" onclick="removeDevice('${device.device_id}')">🗑️ 刪除</button>
+                                    </div>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+        
+        // 新增單一設備
+        async function addDevice() {
+            const model = document.getElementById('deviceModel').value;
+            const fwVersion = document.getElementById('fwVersion').value;
+            const mac = document.getElementById('deviceMac').value;
+            const useSequential = document.getElementById('useSequential').checked;
+            
+            if (!model) {
+                alert('請選擇設備型號');
+                return;
+            }
+            
+            try {
+                const response = await apiFetch('/api/devices', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model,
+                        fw_version: fwVersion || null,
+                        mac: mac || null,
+                        use_sequential: useSequential
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('設備新增成功！');
+                    document.getElementById('deviceMac').value = '';
+                    await refreshDevices();
+                } else {
+                    alert('新增失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`新增失敗: ${error.message}`);
+                alert('新增失敗: ' + error.message);
+            }
+        }
+        
+        // 批次新增設備
+        async function addDevicesBatch() {
+            const model = document.getElementById('deviceModel').value;
+            const fwVersion = document.getElementById('fwVersion').value;
+            const count = parseInt(document.getElementById('deviceCount').value);
+            const useSequential = document.getElementById('useSequential').checked;
+            
+            if (!model) {
+                alert('請選擇設備型號');
+                return;
+            }
+            
+            if (count < 1 || count > 100) {
+                alert('設備數量必須在 1-100 之間');
+                return;
+            }
+            
+            if (!confirm(`確定要新增 ${count} 個 ${model} 設備嗎？`)) {
+                return;
+            }
+            
+            try {
+                const response = await apiFetch('/api/devices/batch', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model,
+                        fw_version: fwVersion || null,
+                        count,
+                        use_sequential: useSequential
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`成功新增 ${data.devices.length} 個設備！`);
+                    await refreshDevices();
+                } else {
+                    alert('批次新增失敗:\n' + data.errors.join('\n'));
+                }
+            } catch (error) {
+                logMessage(`批次新增失敗: ${error.message}`);
+                alert('批次新增失敗: ' + error.message);
+            }
+        }
+        
+        // 啟動設備
+        async function startDevice(deviceId) {
+            try {
+                const response = await apiFetch(`/api/devices/${deviceId}/start`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    await refreshDevices();
+                } else {
+                    alert('啟動失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`啟動失敗: ${error.message}`);
+                alert('啟動失敗: ' + error.message);
+            }
+        }
+        
+        // 停止設備
+        async function stopDevice(deviceId) {
+            try {
+                const response = await apiFetch(`/api/devices/${deviceId}/stop`, {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    await refreshDevices();
+                } else {
+                    alert('停止失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`停止失敗: ${error.message}`);
+                alert('停止失敗: ' + error.message);
+            }
+        }
+        
+        // 移除設備
+        async function removeDevice(deviceId) {
+            if (!confirm('確定要刪除此設備嗎？')) {
+                return;
+            }
+            
+            try {
+                const response = await apiFetch(`/api/devices/${deviceId}`, {
+                    method: 'DELETE'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    await refreshDevices();
+                } else {
+                    alert('刪除失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`刪除失敗: ${error.message}`);
+                alert('刪除失敗: ' + error.message);
+            }
+        }
+        
+        // 啟動全部
+        async function startAll() {
+            if (!confirm('確定要啟動所有設備嗎？')) {
+                return;
+            }
+            
+            try {
+                const response = await apiFetch('/api/devices/start-all', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert(`已啟動 ${data.started_count} 個設備`);
+                    await refreshDevices();
+                }
+            } catch (error) {
+                logMessage(`啟動全部失敗: ${error.message}`);
+                alert('啟動失敗: ' + error.message);
+            }
+        }
+        
+        // 停止全部
+        async function stopAll() {
+            if (!confirm('確定要停止所有設備嗎？')) {
+                return;
+            }
+            
+            try {
+                const response = await apiFetch('/api/devices/stop-all', {
+                    method: 'POST'
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    alert('已停止所有設備');
+                    await refreshDevices();
+                }
+            } catch (error) {
+                logMessage(`停止全部失敗: ${error.message}`);
+                alert('停止失敗: ' + error.message);
+            }
+        }
+
+        window.addEventListener('error', (event) => {
+            logMessage(`JS 錯誤: ${event.message}`);
+        });
+
+        window.addEventListener('unhandledrejection', (event) => {
+            logMessage(`Promise 錯誤: ${event.reason}`);
+        });
+        
+        // 頁面載入時初始化
+        window.onload = init;
+    </script>
+</body>
+</html>
