@@ -381,11 +381,15 @@
 
             <!-- 偵錯資訊 -->
             <div class="control-panel">
-                <h2>偵錯資訊</h2>
-                <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
-                    API Base: <span class="code" id="apiBase">(尚未初始化)</span>
+                <h2 style="cursor: pointer; user-select: none;" onclick="toggleDebug()">
+                    <span id="debugToggle">▶</span> 偵錯資訊
+                </h2>
+                <div id="debugContent" style="display: none;">
+                    <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                        API Base: <span class="code" id="apiBase">(尚未初始化)</span>
+                    </div>
+                    <pre id="debugLog" style="background:#111; color:#0f0; padding:12px; border-radius:6px; height:160px; overflow:auto; font-size:12px;"></pre>
                 </div>
-                <pre id="debugLog" style="background:#111; color:#0f0; padding:12px; border-radius:6px; height:160px; overflow:auto; font-size:12px;"></pre>
             </div>
             
             <!-- 設備列表 -->
@@ -435,7 +439,20 @@
             logMessage('初始化完成');
             await loadModels();
             await refreshDevices();
-            setInterval(refreshDevices, 3000); // 每3秒更新一次狀態
+            setInterval(refreshDevices, 60000); // 每60秒更新一次狀態
+        }
+        
+        // 切換偵錯資訊顯示
+        function toggleDebug() {
+            const content = document.getElementById('debugContent');
+            const toggle = document.getElementById('debugToggle');
+            if (content.style.display === 'none') {
+                content.style.display = 'block';
+                toggle.textContent = '▼';
+            } else {
+                content.style.display = 'none';
+                toggle.textContent = '▶';
+            }
         }
         
         // 載入支援的型號
