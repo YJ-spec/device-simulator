@@ -6,17 +6,16 @@ from datetime import datetime
 import threading
 import random
 import secrets
+import os
 
 class DeviceSimulator:
     """單一設備模擬器"""
     
     # 支援的設備型號和對應的預設韌體版本
-    DEVICE_MODELS = {
-        'ZP25': 'T251107-S1',
+    DEFAULT_DEVICE_MODELS = {
         'ZP2': 'T251107-S1',
-        'ZF1': 'F101205-S2',
-        'ZF2': 'F201205-S2',
     }
+    DEVICE_MODELS = dict(DEFAULT_DEVICE_MODELS)
     
     def __init__(self, device_id, mac, model, fw_version, broker, port, username='', password='', 
                  heartbeat_interval=60, data_interval=60):
@@ -59,11 +58,11 @@ class DeviceSimulator:
     def send_version_info(self):
         """發送設備版本資訊 (連線成功時發送一次)"""
         payload = {
-            "MODEL": self.model,
+            "MODEL": "ZP25" if self.model == "ZP2" else self.model,
             "FW": self.fw_version,
             "HW": self.hw_version,
             "WE310F5": "39.00.008",
-            "E750": "VS",
+            "P750": "V8",
             "SADDR": "10",
             "SWTYPE": "0"
         }
@@ -76,30 +75,31 @@ class DeviceSimulator:
         """發送感測器數據"""
         payload = {
             "data": {
-                "ts": "0",
+                "ts": 0,
                 "t": round(random.uniform(20.0, 30.0), 2),
                 "h": round(random.uniform(40.0, 80.0), 2),
-                "cc": round(random.uniform(20.0, 35.0), 2),
+                "ct": round(random.uniform(20.0, 35.0), 2),
                 "ch": round(random.uniform(50.0, 70.0), 2),
-                "pi": 0,
+                "p1": 0,
                 "p25": 0,
                 "p10": 0,
-                "v": 50,
-                "vi": 0,
+                "v": random.randint(50, 60),
+                "vl": 0,
                 "c": random.randint(900, 1000),
                 "ec": random.randint(450, 550),
-                "ra": random.randint(-50, -40),
+                "rs": random.randint(-50, -40),
                 "lv": 0
             },
-            "datai": {
-                "sanple": 1,
-                "SCDdx": 1,
-                "cp": 1,
-                "raet": 500,
+            "data1": {
+                "P750": random.randint(1, 10),
+                "AHT25": 1,
+                "SCD4x": 1,
+                "op": 1,
+                "rset": 500,
                 "speed": 0,
                 "alarm": 0,
-                "gre": random.randint(600, 700),
-                "aA": 10
+                "rpm": random.randint(500, 700),
+                "sa": 10
             }
         }
         
@@ -186,6 +186,37 @@ class DeviceManager:
         self.device_counter = 0
         self.used_macs = set()
         self.lock = threading.RLock()
+        self.model_store_path = os.getenv(
+            'MODEL_STORE_PATH',
+            os.path.join(os.path.dirname(__file__), 'data', 'models.json')
+        )
+        self._load_models()
+
+    def _load_models(self):
+        """載入型號設定（若無檔案則使用預設）"""
+        with self.lock:
+            if not os.path.exists(self.model_store_path):
+                DeviceSimulator.DEVICE_MODELS = dict(DeviceSimulator.DEFAULT_DEVICE_MODELS)
+                return
+
+            try:
+                with open(self.model_store_path, 'r', encoding='utf-8') as f:
+                    data = json.load(f)
+                if isinstance(data, dict) and all(
+                    isinstance(k, str) and isinstance(v, str) for k, v in data.items()
+                ):
+                    DeviceSimulator.DEVICE_MODELS = dict(data)
+                else:
+                    DeviceSimulator.DEVICE_MODELS = dict(DeviceSimulator.DEFAULT_DEVICE_MODELS)
+            except Exception:
+                DeviceSimulator.DEVICE_MODELS = dict(DeviceSimulator.DEFAULT_DEVICE_MODELS)
+
+    def _save_models(self):
+        """儲存型號設定"""
+        with self.lock:
+            os.makedirs(os.path.dirname(self.model_store_path), exist_ok=True)
+            with open(self.model_store_path, 'w', encoding='utf-8') as f:
+                json.dump(DeviceSimulator.DEVICE_MODELS, f, ensure_ascii=False, indent=2)
     
     def generate_mac(self):
         """生成唯一的 MAC 地址"""
@@ -211,6 +242,10 @@ class DeviceManager:
     def add_device(self, model, fw_version=None, mac=None, use_sequential=False):
         """新增設備"""
         with self.lock:
+            # 檢查設備數量限制（最多 100 台）
+            if len(self.devices) >= 100:
+                return None, f"設備數量已達到上限 (100台)，無法新增"
+            
             # 驗證型號
             if model not in DeviceSimulator.DEVICE_MODELS:
                 return None, f"不支援的型號: {model}"
@@ -282,19 +317,78 @@ class DeviceManager:
     def start_all(self):
         """啟動所有設備"""
         count = 0
-        for device in self.devices.values():
+        with self.lock:
+            devices_snapshot = list(self.devices.values())
+        for device in devices_snapshot:
             if device.start():
                 count += 1
         return count
     
     def stop_all(self):
         """停止所有設備"""
-        for device in self.devices.values():
+        with self.lock:
+            devices_snapshot = list(self.devices.values())
+        for device in devices_snapshot:
             device.stop()
+
+    def remove_all(self):
+        """移除所有設備"""
+        with self.lock:
+            count = len(self.devices)
+            for device in list(self.devices.values()):
+                device.stop()
+                self.used_macs.discard(device.mac)
+            self.devices.clear()
+            return count
     
     def get_all_status(self):
         """取得所有設備狀態"""
-        return [device.get_status() for device in self.devices.values()]
+        with self.lock:
+            devices_snapshot = list(self.devices.values())
+        return [device.get_status() for device in devices_snapshot]
+    
+    def get_paginated_status(self, page=1, page_size=50):
+        """
+        取得分頁設備狀態（用於優化大量設備時的性能）
+        
+        參數：
+        - page: 頁碼（1-based）
+        - page_size: 每頁設備數
+        
+        回傳：
+        {
+            'devices': [...],
+            'total': 總設備數,
+            'page': 當前頁數,
+            'page_size': 每頁大小,
+            'total_pages': 總頁數,
+            'max_devices': 最大設備數限制
+        }
+        """
+        with self.lock:
+            all_devices = list(self.devices.values())
+        
+        total = len(all_devices)
+        total_pages = (total + page_size - 1) // page_size
+        
+        # 確保頁碼有效
+        page = max(1, min(page, total_pages if total_pages > 0 else 1))
+        
+        # 計算切片索引
+        start_idx = (page - 1) * page_size
+        end_idx = start_idx + page_size
+        
+        # 獲取該頁的設備狀態
+        page_devices = [device.get_status() for device in all_devices[start_idx:end_idx]]
+        
+        return {
+            'devices': page_devices,
+            'total': total,
+            'page': page,
+            'page_size': page_size,
+            'total_pages': total_pages,
+            'max_devices': 100  # 設備上限
+        }
     
     def get_device_status(self, device_id):
         """取得單一設備狀態"""
@@ -304,4 +398,48 @@ class DeviceManager:
     
     def get_supported_models(self):
         """取得支援的設備型號"""
-        return DeviceSimulator.DEVICE_MODELS
+        return dict(DeviceSimulator.DEVICE_MODELS)
+
+    def add_model(self, model, fw_version):
+        """新增支援的設備型號"""
+        model = (model or '').strip()
+        fw_version = (fw_version or '').strip()
+        if not model:
+            return False, "設備型號不可為空"
+        if not fw_version:
+            return False, "韌體版本不可為空"
+        with self.lock:
+            DeviceSimulator.DEVICE_MODELS[model] = fw_version
+            self._save_models()
+        return True, None
+
+    def remove_model(self, model):
+        """移除支援的設備型號"""
+        model = (model or '').strip()
+        if not model:
+            return False, "設備型號不可為空"
+        with self.lock:
+            if model not in DeviceSimulator.DEVICE_MODELS:
+                return False, "設備型號不存在"
+            if any(device.model == model for device in self.devices.values()):
+                return False, "仍有設備使用此型號，無法移除"
+            del DeviceSimulator.DEVICE_MODELS[model]
+            self._save_models()
+        return True, None
+
+    def import_models(self, models):
+        """匯入型號設定"""
+        if not isinstance(models, dict) or not all(
+            isinstance(k, str) and isinstance(v, str) for k, v in models.items()
+        ):
+            return False, "匯入資料格式不正確"
+
+        with self.lock:
+            in_use = {device.model for device in self.devices.values()}
+            missing = in_use - set(models.keys())
+            if missing:
+                return False, f"仍有設備使用以下型號，無法匯入：{', '.join(sorted(missing))}"
+
+            DeviceSimulator.DEVICE_MODELS = dict(models)
+            self._save_models()
+        return True, None

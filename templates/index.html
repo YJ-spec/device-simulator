@@ -59,6 +59,60 @@
             margin-bottom: 20px;
             font-size: 1.5em;
         }
+
+        .panel-header {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+        }
+
+        .panel-header h2 {
+            margin-bottom: 0;
+        }
+
+        .panel-header.with-gear {
+            position: relative;
+        }
+
+        .panel-header.with-gear .icon-btn {
+            position: absolute;
+            right: 0;
+            top: 0;
+        }
+
+        .panel-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .icon-btn {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            background: #fff;
+            cursor: pointer;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            transition: all 0.2s;
+        }
+
+        .icon-btn:hover {
+            border-color: #667eea;
+            color: #667eea;
+        }
+
+        .panel-badge {
+            font-size: 12px;
+            color: #666;
+            background: #eef1ff;
+            padding: 4px 8px;
+            border-radius: 999px;
+        }
         
         .form-row {
             display: grid;
@@ -282,6 +336,11 @@
             opacity: 0.3;
         }
         
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
         @media (max-width: 768px) {
             .form-row {
                 grid-template-columns: 1fr;
@@ -312,14 +371,17 @@
 <body>
     <div class="container">
         <header>
-            <h1>🔧 ZP2/ZF1 設備模擬器</h1>
+            <h1>🔧 設備模擬器</h1>
             <p>動態管理多個 MQTT 設備模擬器</p>
         </header>
         
         <div class="content">
             <!-- 新增設備控制面板 -->
             <div class="control-panel">
-                <h2>新增設備</h2>
+                <div class="panel-header with-gear">
+                    <h2>新增設備</h2>
+                    <button class="icon-btn" id="settingsToggle" onclick="toggleSettingsPanel()" title="設定">⚙️</button>
+                </div>
                 
                 <div class="form-row">
                     <div class="form-group">
@@ -359,7 +421,43 @@
                     <button class="btn-primary" onclick="addDevicesBatch()">➕ 批次新增</button>
                     <button class="btn-success" onclick="startAll()">▶️ 啟動全部</button>
                     <button class="btn-warning" onclick="stopAll()">⏸️ 停止全部</button>
-                    <button class="btn-danger" onclick="refreshDevices()">🔄 重新整理</button>
+                    <button class="btn-danger" onclick="removeAllDevices()">🧹 移除全部</button>
+                    <button class="btn-warning" onclick="refreshDevices()">🔄 重新整理</button>
+                </div>
+            </div>
+
+            <!-- 設定（合併：預設型號管理 + 偵錯資訊） -->
+            <div class="control-panel" id="settingsPanel" style="display: none;">
+                <h2>設定</h2>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="newModelName">設備型號</label>
+                        <input type="text" id="newModelName" placeholder="例如：ZP2">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="newModelFw">預設韌體版本</label>
+                        <input type="text" id="newModelFw" placeholder="例如：T251107-S1">
+                    </div>
+                </div>
+
+                <div class="btn-group">
+                    <button class="btn-primary" onclick="addModel()">➕ 新增型號</button>
+                    <button class="btn-warning" onclick="exportModels()">⬇️ 匯出</button>
+                    <label class="btn-primary btn-sm" style="display:inline-flex; align-items:center; gap:6px;">
+                        ⬆️ 匯入
+                        <input type="file" id="modelsImportFile" accept="application/json" style="display:none" onchange="handleModelsImportFile(event)">
+                    </label>
+                </div>
+
+                <div id="modelsList" style="margin-top: 15px;"></div>
+
+                <div style="margin-top: 20px;">
+                    <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
+                        偵錯資訊（API Base: <span class="code" id="apiBase">(尚未初始化)</span>）
+                    </div>
+                    <pre id="debugLog" style="background:#111; color:#0f0; padding:12px; border-radius:6px; height:160px; overflow:auto; font-size:12px;"></pre>
                 </div>
             </div>
             
@@ -379,18 +477,7 @@
                 </div>
             </div>
 
-            <!-- 偵錯資訊 -->
-            <div class="control-panel">
-                <h2 style="cursor: pointer; user-select: none;" onclick="toggleDebug()">
-                    <span id="debugToggle">▶</span> 偵錯資訊
-                </h2>
-                <div id="debugContent" style="display: none;">
-                    <div style="font-size: 0.9em; color: #666; margin-bottom: 10px;">
-                        API Base: <span class="code" id="apiBase">(尚未初始化)</span>
-                    </div>
-                    <pre id="debugLog" style="background:#111; color:#0f0; padding:12px; border-radius:6px; height:160px; overflow:auto; font-size:12px;"></pre>
-                </div>
-            </div>
+            
             
             <!-- 設備列表 -->
             <div class="devices-section">
@@ -430,8 +517,29 @@
             logMessage(`← ${response.status} ${method} ${url}`);
             return response;
         };
+
+        function toggleSettingsPanel() {
+            const panel = document.getElementById('settingsPanel');
+            if (!panel) return;
+            const isHidden = panel.style.display === 'none';
+            panel.style.display = isHidden ? 'block' : 'none';
+        }
         let devices = [];
         let models = {};
+        let isProcessing = false;  // 全局处理状态
+        
+        // 显示操作中的提示
+        function showProcessing(message) {
+            isProcessing = true;
+            const container = document.getElementById('devicesContainer');
+            container.innerHTML = `
+                <div class="empty-state">
+                    <div style="font-size: 48px; animation: spin 1s linear infinite;">⚙️</div>
+                    <h3>${message}</h3>
+                    <p>請稍候...</p>
+                </div>
+            `;
+        }
         
         // 初始化
         async function init() {
@@ -442,18 +550,7 @@
             setInterval(refreshDevices, 60000); // 每60秒更新一次狀態
         }
         
-        // 切換偵錯資訊顯示
-        function toggleDebug() {
-            const content = document.getElementById('debugContent');
-            const toggle = document.getElementById('debugToggle');
-            if (content.style.display === 'none') {
-                content.style.display = 'block';
-                toggle.textContent = '▼';
-            } else {
-                content.style.display = 'none';
-                toggle.textContent = '▶';
-            }
-        }
+        
         
         // 載入支援的型號
         async function loadModels() {
@@ -463,15 +560,59 @@
                 
                 if (data.success) {
                     models = data.models;
-                    const select = document.getElementById('deviceModel');
-                    select.innerHTML = Object.keys(models).map(model => 
-                        `<option value="${model}">${model} (${models[model]})</option>`
-                    ).join('');
+                    renderModelOptions();
+                    renderModelsList();
                 }
             } catch (error) {
                 logMessage(`載入型號失敗: ${error.message}`);
                 console.error('載入型號失敗:', error);
             }
+        }
+
+        function renderModelOptions() {
+            const select = document.getElementById('deviceModel');
+            const modelKeys = Object.keys(models || {});
+            if (modelKeys.length === 0) {
+                select.innerHTML = '<option value="">尚無可用型號</option>';
+                return;
+            }
+
+            select.innerHTML = modelKeys.map(model => 
+                `<option value="${model}">${model} (${models[model]})</option>`
+            ).join('');
+        }
+
+        function renderModelsList() {
+            const container = document.getElementById('modelsList');
+            const modelKeys = Object.keys(models || {});
+
+            if (modelKeys.length === 0) {
+                container.innerHTML = '<div class="empty-state" style="padding: 20px;">尚無預設型號</div>';
+                return;
+            }
+
+            container.innerHTML = `
+                <table class="devices-table">
+                    <thead>
+                        <tr>
+                            <th>型號</th>
+                            <th>預設韌體版本</th>
+                            <th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${modelKeys.map(model => `
+                            <tr>
+                                <td><strong>${model}</strong></td>
+                                <td>${models[model]}</td>
+                                <td>
+                                    <button class="btn-danger btn-sm" onclick="removeModel('${model}')">🗑️ 移除</button>
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            `;
         }
         
         // 重新整理設備列表
@@ -480,7 +621,7 @@
             const container = document.getElementById('devicesContainer');
             
             try {
-                const response = await apiFetch('/api/devices');
+                const response = await apiFetch('/api/devices?page_size=100');
                 const data = await response.json();
                 
                 if (data.success) {
@@ -651,6 +792,137 @@
                 alert('批次新增失敗: ' + error.message);
             }
         }
+
+        // 新增型號
+        async function addModel() {
+            const model = document.getElementById('newModelName').value.trim();
+            const fwVersion = document.getElementById('newModelFw').value.trim();
+
+            if (!model || !fwVersion) {
+                alert('請輸入型號與預設韌體版本');
+                return;
+            }
+
+            try {
+                const response = await apiFetch('/api/models', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        model,
+                        fw_version: fwVersion
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    document.getElementById('newModelName').value = '';
+                    document.getElementById('newModelFw').value = '';
+                    models = data.models || models;
+                    renderModelOptions();
+                    renderModelsList();
+                } else {
+                    alert('新增型號失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`新增型號失敗: ${error.message}`);
+                alert('新增型號失敗: ' + error.message);
+            }
+        }
+
+        // 匯出型號
+        async function exportModels() {
+            try {
+                const response = await apiFetch('/api/models/export');
+                if (!response.ok) {
+                    alert('匯出失敗');
+                    return;
+                }
+                const blob = await response.blob();
+                const url = URL.createObjectURL(blob);
+                const link = document.createElement('a');
+                link.href = url;
+                link.download = 'device_models.json';
+                document.body.appendChild(link);
+                link.click();
+                link.remove();
+                URL.revokeObjectURL(url);
+            } catch (error) {
+                logMessage(`匯出失敗: ${error.message}`);
+                alert('匯出失敗: ' + error.message);
+            }
+        }
+
+        function handleModelsImportFile(event) {
+            const file = event.target.files && event.target.files[0];
+            if (!file) {
+                return;
+            }
+
+            const reader = new FileReader();
+            reader.onload = async () => {
+                try {
+                    const content = reader.result;
+                    const parsed = JSON.parse(content);
+                    await importModels(parsed);
+                } catch (error) {
+                    logMessage(`匯入檔案解析失敗: ${error.message}`);
+                    alert('匯入檔案解析失敗: ' + error.message);
+                } finally {
+                    event.target.value = '';
+                }
+            };
+            reader.readAsText(file);
+        }
+
+        async function importModels(modelsPayload) {
+            try {
+                const response = await apiFetch('/api/models/import', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({ models: modelsPayload })
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    models = data.models || models;
+                    renderModelOptions();
+                    renderModelsList();
+                } else {
+                    alert('匯入型號失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`匯入型號失敗: ${error.message}`);
+                alert('匯入型號失敗: ' + error.message);
+            }
+        }
+
+        // 移除型號
+        async function removeModel(model) {
+            if (!confirm(`確定要移除型號 ${model} 嗎？`)) {
+                return;
+            }
+
+            try {
+                const response = await apiFetch(`/api/models/${model}`, {
+                    method: 'DELETE'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    models = data.models || models;
+                    renderModelOptions();
+                    renderModelsList();
+                } else {
+                    alert('移除型號失敗: ' + data.error);
+                }
+            } catch (error) {
+                logMessage(`移除型號失敗: ${error.message}`);
+                alert('移除型號失敗: ' + error.message);
+            }
+        }
         
         // 啟動設備
         async function startDevice(deviceId) {
@@ -759,6 +1031,31 @@
             } catch (error) {
                 logMessage(`停止全部失敗: ${error.message}`);
                 alert('停止失敗: ' + error.message);
+            }
+        }
+
+        // 移除全部設備
+        async function removeAllDevices() {
+            if (!confirm('確定要移除所有設備嗎？此操作無法復原。')) {
+                return;
+            }
+
+            try {
+                const response = await apiFetch('/api/devices/remove-all', {
+                    method: 'POST'
+                });
+
+                const data = await response.json();
+
+                if (data.success) {
+                    alert(`已移除 ${data.removed_count} 個設備`);
+                    await refreshDevices();
+                } else {
+                    alert('移除全部失敗');
+                }
+            } catch (error) {
+                logMessage(`移除全部失敗: ${error.message}`);
+                alert('移除全部失敗: ' + error.message);
             }
         }
 

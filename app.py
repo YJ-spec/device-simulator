@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, send_file
 from flask_cors import CORS
 from device_manager import DeviceManager
 import os
 from dotenv import load_dotenv
+import io
+import json
 
 load_dotenv()
 
@@ -31,12 +33,95 @@ def get_models():
         'models': manager.get_supported_models()
     })
 
-@app.route('/api/devices', methods=['GET'])
-def get_devices():
-    """取得所有設備狀態"""
+@app.route('/api/models', methods=['POST'])
+def add_model():
+    """新增支援的設備型號"""
+    data = request.json or {}
+    model = data.get('model')
+    fw_version = data.get('fw_version')
+
+    success, error = manager.add_model(model, fw_version)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+
     return jsonify({
         'success': True,
-        'devices': manager.get_all_status()
+        'models': manager.get_supported_models()
+    })
+
+@app.route('/api/models/<model>', methods=['DELETE'])
+def remove_model(model):
+    """移除支援的設備型號"""
+    success, error = manager.remove_model(model)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+
+    return jsonify({
+        'success': True,
+        'models': manager.get_supported_models()
+    })
+
+@app.route('/api/models/export', methods=['GET'])
+def export_models():
+    """匯出支援的設備型號"""
+    models = manager.get_supported_models()
+    data = json.dumps(models, ensure_ascii=False, indent=2)
+    return send_file(
+        io.BytesIO(data.encode('utf-8')),
+        mimetype='application/json',
+        as_attachment=True,
+        download_name='device_models.json'
+    )
+
+@app.route('/api/models/import', methods=['POST'])
+def import_models():
+    """匯入支援的設備型號"""
+    data = request.json or {}
+    models = data.get('models') if isinstance(data, dict) else None
+    if models is None and isinstance(data, dict):
+        models = data
+
+    success, error = manager.import_models(models)
+    if error:
+        return jsonify({'success': False, 'error': error}), 400
+
+    return jsonify({
+        'success': True,
+        'models': manager.get_supported_models()
+    })
+
+@app.route('/api/devices', methods=['GET'])
+def get_devices():
+    """
+    取得設備狀態，支援分頁
+    
+    查詢參數：
+    - page: 頁碼（預設 1）
+    - page_size: 每頁大小（預設 50，最大 100）
+    - use_pagination: 是否使用分頁（預設 true）
+    """
+    # 檢查是否使用分頁
+    use_pagination = request.args.get('use_pagination', 'true').lower() != 'false'
+    
+    if not use_pagination:
+        # 不分頁，返回所有設備（警告：大量設備時可能很慢）
+        return jsonify({
+            'success': True,
+            'devices': manager.get_all_status()
+        })
+    
+    # 使用分頁
+    page = int(request.args.get('page', 1))
+    page_size = int(request.args.get('page_size', 50))
+    
+    # 限制 page_size 最多 100
+    page_size = min(max(1, page_size), 100)
+    
+    paginated_result = manager.get_paginated_status(page, page_size)
+    
+    return jsonify({
+        'success': True,
+        **paginated_result  # 展開分頁結果
     })
 
 @app.route('/api/devices', methods=['POST'])
@@ -74,8 +159,17 @@ def add_devices_batch():
     if not model:
         return jsonify({'success': False, 'error': '缺少設備型號'}), 400
     
+    # 檢查請求數量
     if count < 1 or count > 100:
         return jsonify({'success': False, 'error': '設備數量必須在 1-100 之間'}), 400
+    
+    # 檢查是否會超過總限制 (提前拒絕，不創建部分設備)
+    current_device_count = len(manager.devices)
+    if current_device_count + count > 100:
+        return jsonify({
+            'success': False,
+            'error': f'設備數量超出限制。目前有 {current_device_count} 台設備，最多還能新增 {100 - current_device_count} 台'
+        }), 400
     
     added_devices = []
     errors = []
@@ -145,6 +239,15 @@ def stop_all_devices():
     """停止所有設備"""
     manager.stop_all()
     return jsonify({'success': True})
+
+@app.route('/api/devices/remove-all', methods=['POST'])
+def remove_all_devices():
+    """移除所有設備"""
+    count = manager.remove_all()
+    return jsonify({
+        'success': True,
+        'removed_count': count
+    })
 
 if __name__ == '__main__':
     port = int(os.getenv('WEB_PORT', 5000))
