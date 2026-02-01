@@ -366,6 +366,135 @@
         .loading.active {
             display: block;
         }
+        
+        /* 進度提示模態框 */
+        .progress-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.7);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .progress-modal.active {
+            display: flex;
+        }
+        
+        .progress-content {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            min-width: 400px;
+            max-width: 500px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.3);
+            text-align: center;
+        }
+        
+        .progress-content h3 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        
+        .progress-bar-container {
+            width: 100%;
+            height: 8px;
+            background: #e0e0e0;
+            border-radius: 4px;
+            overflow: hidden;
+            margin: 20px 0;
+        }
+        
+        .progress-bar {
+            height: 100%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            transition: width 0.3s ease;
+            width: 0%;
+        }
+        
+        .progress-text {
+            color: #666;
+            margin: 10px 0;
+        }
+        
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #667eea;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        /* 通知系統 */
+        .toast-container {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 10000;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .toast {
+            background: white;
+            border-radius: 8px;
+            padding: 16px 20px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            min-width: 300px;
+            max-width: 400px;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            animation: slideIn 0.3s ease;
+        }
+        
+        .toast.success { border-left: 4px solid #28a745; }
+        .toast.error { border-left: 4px solid #dc3545; }
+        .toast.warning { border-left: 4px solid #ffc107; }
+        .toast.info { border-left: 4px solid #17a2b8; }
+        
+        .toast-icon {
+            font-size: 20px;
+        }
+        
+        .toast-message {
+            flex: 1;
+            color: #333;
+        }
+        
+        @keyframes slideIn {
+            from {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+        
+        @keyframes slideOut {
+            from {
+                transform: translateX(0);
+                opacity: 1;
+            }
+            to {
+                transform: translateX(400px);
+                opacity: 0;
+            }
+        }
     </style>
 </head>
 <body>
@@ -497,6 +626,21 @@
             </div>
         </div>
     </div>
+    
+    <!-- 進度提示模態框 -->
+    <div id="progressModal" class="progress-modal">
+        <div class="progress-content">
+            <h3 id="progressTitle">處理中...</h3>
+            <div class="spinner"></div>
+            <div class="progress-bar-container">
+                <div id="progressBar" class="progress-bar"></div>
+            </div>
+            <div id="progressText" class="progress-text">請稍候...</div>
+        </div>
+    </div>
+    
+    <!-- 通知容器 -->
+    <div id="toastContainer" class="toast-container"></div>
     
     <script>
         const API_BASE = location.protocol === 'file:' ? 'http://127.0.0.1:5000' : '';
@@ -734,15 +878,14 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('設備新增成功！');
                     document.getElementById('deviceMac').value = '';
                     await refreshDevices();
                 } else {
-                    alert('新增失敗: ' + data.error);
+                    showToast(data.error || '新增失敗', 'error');
                 }
             } catch (error) {
                 logMessage(`新增失敗: ${error.message}`);
-                alert('新增失敗: ' + error.message);
+                showToast('新增失敗: ' + error.message, 'error');
             }
         }
         
@@ -754,16 +897,12 @@
             const useSequential = document.getElementById('useSequential').checked;
             
             if (!model) {
-                alert('請選擇設備型號');
+                showToast('請選擇設備型號', 'warning');
                 return;
             }
             
             if (count < 1 || count > 100) {
-                alert('設備數量必須在 1-100 之間');
-                return;
-            }
-            
-            if (!confirm(`確定要新增 ${count} 個 ${model} 設備嗎？`)) {
+                showToast('設備數量必須在 1-100 之間', 'warning');
                 return;
             }
             
@@ -782,14 +921,17 @@
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`成功新增 ${data.devices.length} 個設備！`);
+                    showToast(`成功新增 ${data.devices.length} 個設備`, 'success');
                     await refreshDevices();
                 } else {
-                    alert('批次新增失敗:\n' + data.errors.join('\n'));
+                    const errorMsg = data.errors && data.errors.length > 0 
+                        ? data.errors.join('\n') 
+                        : (data.error || '批次新增失敗');
+                    showToast(errorMsg, 'error', 5000);
                 }
             } catch (error) {
                 logMessage(`批次新增失敗: ${error.message}`);
-                alert('批次新增失敗: ' + error.message);
+                showToast('批次新增失敗: ' + error.message, 'error');
             }
         }
 
@@ -799,7 +941,7 @@
             const fwVersion = document.getElementById('newModelFw').value.trim();
 
             if (!model || !fwVersion) {
-                alert('請輸入型號與預設韌體版本');
+                showToast('請輸入型號與預設韌體版本', 'warning');
                 return;
             }
 
@@ -821,12 +963,13 @@
                     models = data.models || models;
                     renderModelOptions();
                     renderModelsList();
+                    showToast(`型號 ${model} 新增成功`, 'success');
                 } else {
-                    alert('新增型號失敗: ' + data.error);
+                    showToast(data.error || '新增型號失敗', 'error');
                 }
             } catch (error) {
                 logMessage(`新增型號失敗: ${error.message}`);
-                alert('新增型號失敗: ' + error.message);
+                showToast('新增型號失敗: ' + error.message, 'error');
             }
         }
 
@@ -835,7 +978,7 @@
             try {
                 const response = await apiFetch('/api/models/export');
                 if (!response.ok) {
-                    alert('匯出失敗');
+                    showToast('匯出失敗', 'error');
                     return;
                 }
                 const blob = await response.blob();
@@ -847,9 +990,10 @@
                 link.click();
                 link.remove();
                 URL.revokeObjectURL(url);
+                showToast('型號已匯出', 'success');
             } catch (error) {
                 logMessage(`匯出失敗: ${error.message}`);
-                alert('匯出失敗: ' + error.message);
+                showToast('匯出失敗: ' + error.message, 'error');
             }
         }
 
@@ -867,7 +1011,7 @@
                     await importModels(parsed);
                 } catch (error) {
                     logMessage(`匯入檔案解析失敗: ${error.message}`);
-                    alert('匯入檔案解析失敗: ' + error.message);
+                    showToast('匯入檔案解析失敗: ' + error.message, 'error');
                 } finally {
                     event.target.value = '';
                 }
@@ -889,12 +1033,13 @@
                     models = data.models || models;
                     renderModelOptions();
                     renderModelsList();
+                    showToast('型號已成功匯入', 'success');
                 } else {
-                    alert('匯入型號失敗: ' + data.error);
+                    showToast(data.error || '匯入型號失敗', 'error', 5000);
                 }
             } catch (error) {
                 logMessage(`匯入型號失敗: ${error.message}`);
-                alert('匯入型號失敗: ' + error.message);
+                showToast('匯入型號失敗: ' + error.message, 'error');
             }
         }
 
@@ -915,12 +1060,13 @@
                     models = data.models || models;
                     renderModelOptions();
                     renderModelsList();
+                    showToast(`型號 ${model} 已移除`, 'success');
                 } else {
-                    alert('移除型號失敗: ' + data.error);
+                    showToast(data.error || '移除型號失敗', 'error');
                 }
             } catch (error) {
                 logMessage(`移除型號失敗: ${error.message}`);
-                alert('移除型號失敗: ' + error.message);
+                showToast('移除型號失敗: ' + error.message, 'error');
             }
         }
         
@@ -936,11 +1082,11 @@
                 if (data.success) {
                     await refreshDevices();
                 } else {
-                    alert('啟動失敗: ' + data.error);
+                    showToast(data.error || '啟動失敗', 'error');
                 }
             } catch (error) {
                 logMessage(`啟動失敗: ${error.message}`);
-                alert('啟動失敗: ' + error.message);
+                showToast('啟動失敗: ' + error.message, 'error');
             }
         }
         
@@ -956,11 +1102,11 @@
                 if (data.success) {
                     await refreshDevices();
                 } else {
-                    alert('停止失敗: ' + data.error);
+                    showToast(data.error || '停止失敗', 'error');
                 }
             } catch (error) {
                 logMessage(`停止失敗: ${error.message}`);
-                alert('停止失敗: ' + error.message);
+                showToast('停止失敗: ' + error.message, 'error');
             }
         }
         
@@ -980,82 +1126,129 @@
                 if (data.success) {
                     await refreshDevices();
                 } else {
-                    alert('刪除失敗: ' + data.error);
+                    showToast(data.error || '刪除失敗', 'error');
                 }
             } catch (error) {
                 logMessage(`刪除失敗: ${error.message}`);
-                alert('刪除失敗: ' + error.message);
+                showToast('刪除失敗: ' + error.message, 'error');
             }
         }
         
         // 啟動全部
         async function startAll() {
-            if (!confirm('確定要啟動所有設備嗎？')) {
+            const count = devices.length;
+            if (count === 0) {
+                showToast('目前沒有設備', 'warning');
                 return;
             }
             
             try {
+                showProgress('啟動設備中', `正在啟動 ${count} 個設備...`);
+                updateProgress(30, `正在啟動 ${count} 個設備...`);
+                
                 const response = await apiFetch('/api/devices/start-all', {
                     method: 'POST'
                 });
                 
+                updateProgress(70, '處理中...');
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert(`已啟動 ${data.started_count} 個設備`);
+                    updateProgress(90, '更新狀態中...');
                     await refreshDevices();
+                    updateProgress(100, `完成！已啟動 ${data.started_count} 個設備`);
+                    
+                    setTimeout(() => {
+                        hideProgress();
+                    }, 1000);
+                } else {
+                    hideProgress();
+                    showToast('啟動失敗', 'error');
                 }
             } catch (error) {
+                hideProgress();
                 logMessage(`啟動全部失敗: ${error.message}`);
-                alert('啟動失敗: ' + error.message);
+                showToast('啟動失敗: ' + error.message, 'error');
             }
         }
         
         // 停止全部
         async function stopAll() {
-            if (!confirm('確定要停止所有設備嗎？')) {
+            const count = devices.filter(d => d.running).length;
+            if (count === 0) {
+                showToast('目前沒有運行中的設備', 'warning');
                 return;
             }
             
             try {
+                showProgress('停止設備中', `正在停止 ${count} 個設備...`);
+                updateProgress(30, `正在停止 ${count} 個設備...`);
+                
                 const response = await apiFetch('/api/devices/stop-all', {
                     method: 'POST'
                 });
                 
+                updateProgress(70, '處理中...');
                 const data = await response.json();
                 
                 if (data.success) {
-                    alert('已停止所有設備');
+                    updateProgress(90, '更新狀態中...');
                     await refreshDevices();
+                    updateProgress(100, `完成！已停止所有設備`);
+                    
+                    setTimeout(() => {
+                        hideProgress();
+                    }, 1000);
+                } else {
+                    hideProgress();
+                    showToast('停止失敗', 'error');
                 }
             } catch (error) {
+                hideProgress();
                 logMessage(`停止全部失敗: ${error.message}`);
-                alert('停止失敗: ' + error.message);
+                showToast('停止失敗: ' + error.message, 'error');
             }
         }
 
         // 移除全部設備
         async function removeAllDevices() {
-            if (!confirm('確定要移除所有設備嗎？此操作無法復原。')) {
+            const count = devices.length;
+            if (count === 0) {
+                showToast('目前沒有設備', 'warning');
                 return;
             }
-
+            
+            if (!confirm(`確定要移除所有 ${count} 個設備嗎？此操作無法復原。`)) {
+                return;
+            }
+            
             try {
+                showProgress('移除設備中', `正在移除 ${count} 個設備...`);
+                updateProgress(30, `正在停止並移除 ${count} 個設備...`);
+                
                 const response = await apiFetch('/api/devices/remove-all', {
                     method: 'POST'
                 });
-
+                
+                updateProgress(70, '處理中...');
                 const data = await response.json();
-
+                
                 if (data.success) {
-                    alert(`已移除 ${data.removed_count} 個設備`);
+                    updateProgress(90, '更新狀態中...');
                     await refreshDevices();
+                    updateProgress(100, `完成！已移除 ${data.removed_count} 個設備`);
+                    
+                    setTimeout(() => {
+                        hideProgress();
+                    }, 1000);
                 } else {
-                    alert('移除全部失敗');
+                    hideProgress();
+                    showToast('移除全部失敗', 'error');
                 }
             } catch (error) {
+                hideProgress();
                 logMessage(`移除全部失敗: ${error.message}`);
-                alert('移除全部失敗: ' + error.message);
+                showToast('移除全部失敗: ' + error.message, 'error');
             }
         }
 
@@ -1066,6 +1259,60 @@
         window.addEventListener('unhandledrejection', (event) => {
             logMessage(`Promise 錯誤: ${event.reason}`);
         });
+        
+        // 通知系統
+        function showToast(message, type = 'info', duration = 3000) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            
+            const icons = {
+                success: '✓',
+                error: '✗',
+                warning: '⚠',
+                info: 'ℹ'
+            };
+            
+            toast.innerHTML = `
+                <div class="toast-icon">${icons[type] || icons.info}</div>
+                <div class="toast-message">${message}</div>
+            `;
+            
+            container.appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.animation = 'slideOut 0.3s ease';
+                setTimeout(() => {
+                    container.removeChild(toast);
+                }, 300);
+            }, duration);
+        }
+        
+        // 進度提示相關函數
+        function showProgress(title, text) {
+            const modal = document.getElementById('progressModal');
+            const titleEl = document.getElementById('progressTitle');
+            const textEl = document.getElementById('progressText');
+            const barEl = document.getElementById('progressBar');
+            
+            titleEl.textContent = title;
+            textEl.textContent = text;
+            barEl.style.width = '0%';
+            modal.classList.add('active');
+        }
+        
+        function updateProgress(percent, text) {
+            const textEl = document.getElementById('progressText');
+            const barEl = document.getElementById('progressBar');
+            
+            if (text) textEl.textContent = text;
+            barEl.style.width = percent + '%';
+        }
+        
+        function hideProgress() {
+            const modal = document.getElementById('progressModal');
+            modal.classList.remove('active');
+        }
         
         // 頁面載入時初始化
         window.onload = init;
