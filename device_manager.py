@@ -14,11 +14,29 @@ class DeviceSimulator:
     
     # 支援的設備型號和對應的預設韌體版本
     DEFAULT_DEVICE_MODELS = {
-        'ZP2': 'T251107-S1',
+        'ZP25': {
+            'fw_version': 'T251107-S1',
+            'series': 'ZP2'
+        },
     }
     DEVICE_MODELS = dict(DEFAULT_DEVICE_MODELS)
+
+    @staticmethod
+    def get_default_series(model):
+        """根據型號名稱推導系列名稱
+        例如: ZP25 -> ZP2, ZF1 -> ZF
+        """
+        if not model:
+            return 'ZP2'
+        model_upper = model.upper()
+        if model_upper.startswith('ZP2'):
+            return 'ZP2'
+        if model_upper.startswith('ZF'):
+            return 'ZF'
+        series = ''.join([c for c in model_upper if c.isalpha()])
+        return series if series else 'ZP2'
     
-    def __init__(self, device_id, mac, model, fw_version, broker, port, username='', password='', 
+    def __init__(self, device_id, mac, model, fw_version, broker, port, series=None, username='', password='', 
                  heartbeat_interval=60, data_interval=60):
         self.device_id = device_id
         self.mac = mac
@@ -27,12 +45,13 @@ class DeviceSimulator:
         self.hw_version = 'V2'
         self.broker = broker
         self.port = port
+        self.series = series or self.get_default_series(model)
         self.username = username
         self.password = password
         self.heartbeat_interval = heartbeat_interval
         self.data_interval = data_interval
         
-        self.topic = f"ZP2/{mac}/data"
+        self.topic = f"{self.series}/{mac}/data"
         self.client = mqtt.Client(client_id=f"device_{mac}")
         self.client.on_connect = self.on_connect
         self.client.on_disconnect = self.on_disconnect
@@ -59,7 +78,7 @@ class DeviceSimulator:
     def send_version_info(self):
         """發送設備版本資訊 (連線成功時發送一次)"""
         payload = {
-            "MODEL": "ZP25" if self.model == "ZP2" else self.model,
+            "MODEL": self.model,
             "FW": self.fw_version,
             "HW": self.hw_version,
             "WE310F5": "39.00.008",
@@ -167,6 +186,7 @@ class DeviceSimulator:
         return {
             'device_id': self.device_id,
             'mac': self.mac,
+            'series': self.series,
             'model': self.model,
             'fw_version': self.fw_version,
             'running': self.running,
@@ -208,10 +228,26 @@ class DeviceManager:
             try:
                 with open(self.model_store_path, 'r', encoding='utf-8') as f:
                     data = json.load(f)
-                if isinstance(data, dict) and all(
-                    isinstance(k, str) and isinstance(v, str) for k, v in data.items()
-                ):
-                    DeviceSimulator.DEVICE_MODELS = dict(data)
+                if isinstance(data, dict):
+                    normalized = {}
+                    for model, value in data.items():
+                        if isinstance(value, str):
+                            normalized[model] = {
+                                'fw_version': value,
+                                'series': DeviceSimulator.get_default_series(model)
+                            }
+                        elif isinstance(value, dict):
+                            fw_version = value.get('fw_version') or value.get('fw')
+                            series = value.get('series') or DeviceSimulator.get_default_series(model)
+                            if isinstance(fw_version, str) and isinstance(series, str):
+                                normalized[model] = {
+                                    'fw_version': fw_version,
+                                    'series': series
+                                }
+                    if normalized:
+                        DeviceSimulator.DEVICE_MODELS = normalized
+                    else:
+                        DeviceSimulator.DEVICE_MODELS = dict(DeviceSimulator.DEFAULT_DEVICE_MODELS)
                 else:
                     DeviceSimulator.DEVICE_MODELS = dict(DeviceSimulator.DEFAULT_DEVICE_MODELS)
             except Exception:
@@ -258,7 +294,8 @@ class DeviceManager:
             
             # 設定韌體版本
             if not fw_version:
-                fw_version = DeviceSimulator.DEVICE_MODELS[model]
+                fw_version = DeviceSimulator.DEVICE_MODELS[model]['fw_version']
+            series = DeviceSimulator.DEVICE_MODELS[model].get('series') or DeviceSimulator.get_default_series(model)
             
             # 生成 MAC
             if mac and mac in self.used_macs:
@@ -283,6 +320,7 @@ class DeviceManager:
                 fw_version=fw_version,
                 broker=self.broker,
                 port=self.port,
+                series=series,
                 username=self.username,
                 password=self.password
             )
@@ -448,16 +486,22 @@ class DeviceManager:
         """取得支援的設備型號"""
         return dict(DeviceSimulator.DEVICE_MODELS)
 
-    def add_model(self, model, fw_version):
+    def add_model(self, model, fw_version, series=None):
         """新增支援的設備型號"""
         model = (model or '').strip()
         fw_version = (fw_version or '').strip()
+        series = (series or '').strip()
         if not model:
             return False, "設備型號不可為空"
         if not fw_version:
             return False, "韌體版本不可為空"
+        if not series:
+            series = DeviceSimulator.get_default_series(model)
         with self.lock:
-            DeviceSimulator.DEVICE_MODELS[model] = fw_version
+            DeviceSimulator.DEVICE_MODELS[model] = {
+                'fw_version': fw_version,
+                'series': series
+            }
             self._save_models()
         return True, None
 
@@ -477,17 +521,34 @@ class DeviceManager:
 
     def import_models(self, models):
         """匯入型號設定"""
-        if not isinstance(models, dict) or not all(
-            isinstance(k, str) and isinstance(v, str) for k, v in models.items()
-        ):
+        if not isinstance(models, dict):
+            return False, "匯入資料格式不正確"
+
+        normalized = {}
+        for model, value in models.items():
+            if isinstance(value, str):
+                normalized[model] = {
+                    'fw_version': value,
+                    'series': DeviceSimulator.get_default_series(model)
+                }
+            elif isinstance(value, dict):
+                fw_version = value.get('fw_version') or value.get('fw')
+                series = value.get('series') or DeviceSimulator.get_default_series(model)
+                if isinstance(fw_version, str) and isinstance(series, str):
+                    normalized[model] = {
+                        'fw_version': fw_version,
+                        'series': series
+                    }
+
+        if not normalized:
             return False, "匯入資料格式不正確"
 
         with self.lock:
             in_use = {device.model for device in self.devices.values()}
-            missing = in_use - set(models.keys())
+            missing = in_use - set(normalized.keys())
             if missing:
                 return False, f"仍有設備使用以下型號，無法匯入：{', '.join(sorted(missing))}"
 
-            DeviceSimulator.DEVICE_MODELS = dict(models)
+            DeviceSimulator.DEVICE_MODELS = dict(normalized)
             self._save_models()
         return True, None

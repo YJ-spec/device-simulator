@@ -39,8 +39,9 @@ def add_model():
     data = request.json or {}
     model = data.get('model')
     fw_version = data.get('fw_version')
+    series = data.get('series')
 
-    success, error = manager.add_model(model, fw_version)
+    success, error = manager.add_model(model, fw_version, series)
     if error:
         return jsonify({'success': False, 'error': error}), 400
 
