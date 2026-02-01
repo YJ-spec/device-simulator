@@ -246,10 +246,10 @@ device-simulator/
 
 ## 已淘汰檔案
 
-以下檔案已不再使用，保留僅作為提醒：
-- device_simulator.py
-- Dockerfile
-- docker-compose.yml
+以下檔案已不再使用，已移除或保留僅作為提醒：
+- ~~device_simulator.py~~ (已移除)
+- Dockerfile (已復原為生產模式)
+- docker-compose.yml (已復原為生產模式)
 
 ## 注意事項
 

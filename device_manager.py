@@ -4,6 +4,7 @@ import json
 import time
 from datetime import datetime
 import threading
+from concurrent.futures import ThreadPoolExecutor
 import random
 import secrets
 import os
@@ -177,6 +178,10 @@ class DeviceSimulator:
 class DeviceManager:
     """設備管理器 - 管理多個設備模擬器"""
     
+    # 批次處理配置
+    BATCH_SIZE = 10  # 每個批次最多 10 台設備
+    MAX_WORKERS = 5  # 最多 5 個併發執行緒
+    
     def __init__(self, broker, port, username='', password=''):
         self.broker = broker
         self.port = port
@@ -186,6 +191,7 @@ class DeviceManager:
         self.device_counter = 0
         self.used_macs = set()
         self.lock = threading.RLock()
+        self.executor = ThreadPoolExecutor(max_workers=self.MAX_WORKERS, thread_name_prefix='DeviceWorker')
         self.model_store_path = os.getenv(
             'MODEL_STORE_PATH',
             os.path.join(os.path.dirname(__file__), 'data', 'models.json')
@@ -315,31 +321,73 @@ class DeviceManager:
         return True, None
     
     def start_all(self):
-        """啟動所有設備"""
+        """啟動所有設備（使用執行緒池批次處理）"""
         count = 0
         with self.lock:
             devices_snapshot = list(self.devices.values())
-        for device in devices_snapshot:
-            if device.start():
-                count += 1
+        
+        if not devices_snapshot:
+            return 0
+        
+        # 使用執行緒池並行啟動設備
+        futures = [self.executor.submit(device.start) for device in devices_snapshot]
+        
+        # 等待所有任務完成並計算成功數
+        for future in futures:
+            try:
+                if future.result(timeout=5):  # 每個設備啟動最多等待 5 秒
+                    count += 1
+            except Exception as e:
+                print(f"啟動設備時出錯: {e}")
+        
         return count
     
     def stop_all(self):
-        """停止所有設備"""
+        """停止所有設備（使用執行緒池批次處理）"""
         with self.lock:
             devices_snapshot = list(self.devices.values())
-        for device in devices_snapshot:
-            device.stop()
+        
+        if not devices_snapshot:
+            return 0
+        
+        # 使用執行緒池並行停止設備
+        futures = [self.executor.submit(device.stop) for device in devices_snapshot]
+        
+        # 等待所有任務完成
+        for future in futures:
+            try:
+                future.result(timeout=5)  # 每個設備停止最多等待 5 秒
+            except Exception as e:
+                print(f"停止設備時出錯: {e}")
+        
+        return len(devices_snapshot)
 
     def remove_all(self):
-        """移除所有設備"""
+        """移除所有設備（使用執行緒池批次處理）"""
         with self.lock:
             count = len(self.devices)
-            for device in list(self.devices.values()):
-                device.stop()
+            devices_snapshot = list(self.devices.values())
+        
+        if not devices_snapshot:
+            return 0
+        
+        # 並行停止所有設備
+        futures = [self.executor.submit(device.stop) for device in devices_snapshot]
+        
+        # 等待所有停止操作完成
+        for future in futures:
+            try:
+                future.result(timeout=5)
+            except Exception as e:
+                print(f"停止設備時出錯: {e}")
+        
+        # 清理設備與 MAC
+        with self.lock:
+            for device in devices_snapshot:
                 self.used_macs.discard(device.mac)
             self.devices.clear()
-            return count
+        
+        return count
     
     def get_all_status(self):
         """取得所有設備狀態"""
